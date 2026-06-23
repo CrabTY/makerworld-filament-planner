@@ -69,8 +69,8 @@ The language switcher in the top-right corner toggles between Chinese and Englis
 Example:
 
 ```text
-https://makerworld.com.cn/zh/models/2004043-chao-ji-ma-li-ao-ma-jiang-144zhang-dan-se-huo-duo
-https://makerworld.com.cn/zh/models/1993223-zi-mu-ma-jiang-xiao-peng-you-chao-ai-wan-de-pin-ci#profileId-2219446
+https://makerworld.com/en/models/40146-benchy-bambu-pla-basic#profileId-109644
+https://makerworld.com/en/models/15106-benchy
 ```
 
 ## Data Sources

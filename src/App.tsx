@@ -197,9 +197,8 @@ const printerModelAliases: Record<string, string> = {
 }
 
 const sampleLinks = [
-  'https://makerworld.com.cn/zh/models/2004043-chao-ji-ma-li-ao-ma-jiang-144zhang-dan-se-huo-duo',
-  'https://makerworld.com.cn/zh/models/2600690-zhong-guo-li-ti-di-tu-pin-tu',
-  'https://makerworld.com.cn/zh/models/1993223-zi-mu-ma-jiang-xiao-peng-you-chao-ai-wan-de-pin-ci#profileId-2219446',
+  'https://makerworld.com/en/models/40146-benchy-bambu-pla-basic#profileId-109644',
+  'https://makerworld.com/en/models/15106-benchy',
 ].join('\n')
 
 const colorNames: Record<string, string> = {
