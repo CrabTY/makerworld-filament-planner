@@ -4,6 +4,8 @@ An MVP tool for pre-purchase planning before 3D printing: paste multiple MakerWo
 
 > Independent open source project under AGPL-3.0-or-later. Not affiliated with, endorsed by, sponsored by, or officially connected to MakerWorld or Bambu Lab.
 
+Live demo: https://makerworld-filament-planner.onrender.com/
+
 ## Features
 
 - Resolve multiple MakerWorld model links in one workflow.
