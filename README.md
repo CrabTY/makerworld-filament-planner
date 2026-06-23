@@ -1,10 +1,17 @@
 # MakerWorld Multi-Project Filament Purchase Calculator
 
+<p>
+  <a href="https://makerworld-filament-planner.onrender.com/"><img height="20" alt="Live demo" src="https://img.shields.io/badge/demo-online-brightgreen"></a>
+  <a href="https://github.com/CrabTY/makerworld-filament-planner/actions/workflows/ci.yml"><img height="20" alt="CI" src="https://github.com/CrabTY/makerworld-filament-planner/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/CrabTY/makerworld-filament-planner/releases"><img height="20" alt="Release" src="https://img.shields.io/github/v/release/CrabTY/makerworld-filament-planner"></a>
+  <a href="./LICENSE"><img height="20" alt="License: AGPL-3.0-or-later" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-blue"></a>
+  <a href="https://nodejs.org/"><img height="20" alt="Node >=20" src="https://img.shields.io/badge/node-%3E%3D20-339933?logo=node.js&logoColor=white"></a>
+  <a href="https://render.com/"><img height="20" alt="Deployed on Render" src="https://img.shields.io/badge/deployed%20on-Render-46e3b7?logo=render&logoColor=white"></a>
+</p>
+
 An MVP tool for pre-purchase planning before 3D printing: paste multiple MakerWorld model links, choose the print profiles you plan to use, aggregate filament colors and weights, then map them to a Bambu Lab filament catalog to generate a purchase list.
 
 > Independent open source project under AGPL-3.0-or-later. Not affiliated with, endorsed by, sponsored by, or officially connected to MakerWorld or Bambu Lab.
-
-Live demo: https://makerworld-filament-planner.onrender.com/
 
 ## Features
 
