@@ -77,6 +77,7 @@ type Project = {
   defaultInstanceId: number
   requestedProfileId: number | null
   selectedInstanceId: number
+  selectedInstanceIds?: number[]
   instances: Profile[]
 }
 
@@ -975,11 +976,79 @@ function compareSummaryRowsForMapping(
   )
 }
 
-function getSelectedProfile(project: Project) {
-  return (
-    project.instances.find((profile) => profile.instanceId === project.selectedInstanceId) ||
-    project.instances[0]
-  )
+function getSelectedProfileIds(project: Project) {
+  const validInstanceIds = new Set(project.instances.map((profile) => profile.instanceId))
+  const selectedIds =
+    project.selectedInstanceIds && project.selectedInstanceIds.length > 0
+      ? project.selectedInstanceIds
+      : [project.selectedInstanceId]
+  const normalizedIds = selectedIds.filter((instanceId, index) => {
+    return validInstanceIds.has(instanceId) && selectedIds.indexOf(instanceId) === index
+  })
+
+  if (normalizedIds.length > 0) return normalizedIds
+  return project.instances[0] ? [project.instances[0].instanceId] : []
+}
+
+function getSelectedProfiles(project: Project) {
+  const selectedIds = new Set(getSelectedProfileIds(project))
+  const selectedProfiles = project.instances.filter((profile) => selectedIds.has(profile.instanceId))
+  return selectedProfiles.length > 0 ? selectedProfiles : project.instances.slice(0, 1)
+}
+
+function getProfilesWeight(profiles: Profile[]) {
+  return profiles.reduce((sum, profile) => sum + Number(profile.weight || 0), 0)
+}
+
+function getProfilesPredictionSeconds(profiles: Profile[]) {
+  return profiles.reduce((sum, profile) => sum + Number(profile.predictionSeconds || 0), 0)
+}
+
+function getProfilesPlateCount(profiles: Profile[]) {
+  return profiles.reduce((sum, profile) => sum + Number(profile.plateCount || 0), 0)
+}
+
+function getSelectedProfilesLabel(profiles: Profile[], isEnglish = false) {
+  if (profiles.length === 1) return profiles[0].title
+  return isEnglish ? `${profiles.length} profiles selected` : `已选择 ${profiles.length} 个配置`
+}
+
+function getSelectedProfilesDetailsLabel(profiles: Profile[], isEnglish = false) {
+  if (profiles.length === 1) return profileDetailsLabel(profiles[0], isEnglish)
+  const totalWeight = getProfilesWeight(profiles)
+  const totalPlates = getProfilesPlateCount(profiles)
+  const totalTime = getProfilesPredictionSeconds(profiles)
+  const printers = Array.from(new Set(profiles.map((profile) => profile.printer).filter(Boolean)))
+  const printerText =
+    printers.length === 0
+      ? isEnglish
+        ? 'Any printer'
+        : '任意打印机'
+      : printers.length === 1
+        ? printers[0]
+        : isEnglish
+          ? `${printers.length} printers`
+          : `${printers.length} 种打印机`
+  const plateText = isEnglish ? `${totalPlates} plates` : `${totalPlates} 盘`
+  return `${printerText} · ${formatMinutes(totalTime)} · ${plateText} · ${totalWeight}g`
+}
+
+function getProfilesFilamentRows(profiles: Profile[]) {
+  const rows = new Map<string, Filament>()
+
+  for (const profile of profiles) {
+    for (const filament of profile.filaments) {
+      const key = filamentKey(filament)
+      const current = rows.get(key)
+      rows.set(key, {
+        ...filament,
+        usedG: Number(filament.usedG || 0) + Number(current?.usedG || 0),
+        usedM: Number(filament.usedM || 0) + Number(current?.usedM || 0),
+      })
+    }
+  }
+
+  return [...rows.values()].sort((a, b) => b.usedG - a.usedG)
 }
 
 function isAmsAffectedProfile(profile: Profile) {
@@ -1069,18 +1138,28 @@ function normalizeNumberDraft(value: string) {
 
 function getProfileSelectionReason(
   project: Project,
-  profile: Profile,
+  profiles: Profile[],
   manuallySelected: boolean,
   isEnglish = false,
 ) {
-  if (manuallySelected) return isEnglish ? 'You manually selected this profile' : '你已手动选择该配置'
+  if (manuallySelected) {
+    return profiles.length === 1
+      ? isEnglish
+        ? 'You manually selected this profile'
+        : '你已手动选择该配置'
+      : isEnglish
+        ? `You manually selected ${profiles.length} profiles for this project`
+        : `你已为该项目手动选择 ${profiles.length} 个配置`
+  }
   if (
     project.requestedProfileId &&
-    (project.requestedProfileId === profile.profileId || project.requestedProfileId === profile.instanceId)
+    profiles.some(
+      (profile) => project.requestedProfileId === profile.profileId || project.requestedProfileId === profile.instanceId,
+    )
   ) {
     return isEnglish ? 'The link specified profileId, so this profile was selected' : '链接指定了 profileId，因此已选中该配置'
   }
-  if (project.selectedInstanceId === project.defaultInstanceId) {
+  if (profiles.length === 1 && profiles[0].instanceId === project.defaultInstanceId) {
     return isEnglish ? 'Using the MakerWorld default print profile' : '使用 MakerWorld 默认打印配置'
   }
   return isEnglish
@@ -1289,33 +1368,34 @@ function App() {
     const rows = new Map<string, SummaryRow>()
 
     for (const project of plannedProjects) {
-      const profile = getSelectedProfile(project)
-      const amsAffectedUsageByFilament = getAmsAffectedUsageByFilament(profile)
-      for (const filament of profile.filaments) {
-        const key = filamentKey(filament)
-        const grams = Number(filament.usedG || 0)
-        const amsGrams = amsAffectedUsageByFilament.get(key) || 0
-        const row = rows.get(key) || {
-          key,
-          type: filament.type,
-          color: filament.color,
-          usedG: 0,
-          usedM: 0,
-          amsUsedG: 0,
-          projects: [],
+      for (const profile of getSelectedProfiles(project)) {
+        const amsAffectedUsageByFilament = getAmsAffectedUsageByFilament(profile)
+        for (const filament of profile.filaments) {
+          const key = filamentKey(filament)
+          const grams = Number(filament.usedG || 0)
+          const amsGrams = amsAffectedUsageByFilament.get(key) || 0
+          const row = rows.get(key) || {
+            key,
+            type: filament.type,
+            color: filament.color,
+            usedG: 0,
+            usedM: 0,
+            amsUsedG: 0,
+            projects: [],
+          }
+          row.usedG += grams
+          row.usedM += Number(filament.usedM || 0)
+          row.amsUsedG += amsGrams
+          row.projects.push({
+            designId: project.designId,
+            title: project.title,
+            profileTitle: profile.title,
+            sourceUrl: project.sourceUrl,
+            grams,
+            amsAffected: amsGrams > 0,
+          })
+          rows.set(key, row)
         }
-        row.usedG += grams
-        row.usedM += Number(filament.usedM || 0)
-        row.amsUsedG += amsGrams
-        row.projects.push({
-          designId: project.designId,
-          title: project.title,
-          profileTitle: profile.title,
-          sourceUrl: project.sourceUrl,
-          grams,
-          amsAffected: amsGrams > 0,
-        })
-        rows.set(key, row)
       }
     }
 
@@ -1323,9 +1403,9 @@ function App() {
   }, [plannedProjects])
 
   const totalWeight = summary.reduce((sum, row) => sum + row.usedG, 0)
-  const selectedProfiles = plannedProjects.map(getSelectedProfile)
-  const totalPlates = selectedProfiles.reduce((sum, profile) => sum + profile.plateCount, 0)
-  const amsProjects = selectedProfiles.filter(hasAmsAffectedUsage).length
+  const allSelectedProfiles = plannedProjects.flatMap(getSelectedProfiles)
+  const totalPlates = allSelectedProfiles.reduce((sum, profile) => sum + profile.plateCount, 0)
+  const amsProjects = plannedProjects.filter((project) => getSelectedProfiles(project).some(hasAmsAffectedUsage)).length
   const totalAmsAffectedWeight = summary.reduce((sum, row) => sum + row.amsUsedG, 0)
 	  const purchaseRows = useMemo(() => {
 	    const rows = new Map<string, { item: CatalogItem; rawRows: SummaryRow[]; usedG: number; amsUsedG: number }>()
@@ -1655,12 +1735,14 @@ function App() {
   const matrixRows = useMemo(
     () =>
       plannedProjects.map((project) => {
-        const profile = getSelectedProfile(project)
+        const profiles = getSelectedProfiles(project)
         const byColor = new Map<string, number>()
-        for (const filament of profile.filaments) {
-          byColor.set(filamentKey(filament), (byColor.get(filamentKey(filament)) || 0) + filament.usedG)
+        for (const profile of profiles) {
+          for (const filament of profile.filaments) {
+            byColor.set(filamentKey(filament), (byColor.get(filamentKey(filament)) || 0) + filament.usedG)
+          }
         }
-        return { project, profile, byColor }
+        return { project, profiles, byColor }
       }),
     [plannedProjects],
   )
@@ -1781,16 +1863,30 @@ function App() {
     }
   }
 
-  function updateSelectedProfile(projectId: number, instanceId: number) {
+  function toggleSelectedProfile(projectId: number, instanceId: number) {
     setProjects((current) =>
-      current.map((project) =>
-        project.designId === projectId ? { ...project, selectedInstanceId: instanceId } : project,
-      ),
+      current.map((project) => {
+        if (project.designId !== projectId) return project
+
+        const selectedIds = getSelectedProfileIds(project)
+        const isSelected = selectedIds.includes(instanceId)
+        const nextSelectedIds =
+          isSelected && selectedIds.length > 1
+            ? selectedIds.filter((selectedInstanceId) => selectedInstanceId !== instanceId)
+            : isSelected
+              ? selectedIds
+              : [...selectedIds, instanceId]
+
+        return {
+          ...project,
+          selectedInstanceId: nextSelectedIds[0] || instanceId,
+          selectedInstanceIds: nextSelectedIds,
+        }
+      }),
     )
     setManualProfileSelections((current) => ({ ...current, [projectId]: true }))
     clearRawSelection()
     setFocusedColorKey(null)
-    setOpenProfilePickerId(null)
   }
 
   function pickMatchingProfiles() {
@@ -1805,7 +1901,13 @@ function App() {
           profileMatchesPrinter(profile, targetPrinter),
         )
         if (matchingProfile) autoSelectedProjectIds.add(project.designId)
-        return matchingProfile ? { ...project, selectedInstanceId: matchingProfile.instanceId } : project
+        return matchingProfile
+          ? {
+              ...project,
+              selectedInstanceId: matchingProfile.instanceId,
+              selectedInstanceIds: [matchingProfile.instanceId],
+            }
+          : project
       }),
     )
     setManualProfileSelections((current) => {
@@ -2339,14 +2441,17 @@ function App() {
             <>
 	              <div className="project-list">
 	                {projects.map((project) => {
-	                  const profile = getSelectedProfile(project)
+	                  const selectedProfiles = getSelectedProfiles(project)
+                    const selectedProfileIds = new Set(selectedProfiles.map((profile) => profile.instanceId))
+                    const profile = selectedProfiles[0] || project.instances[0]
+                    const selectedFilamentRows = getProfilesFilamentRows(selectedProfiles)
 	                  const sortedInstances = sortProfiles(project.instances, profileSort, targetPrinter)
 	                  const isIncluded = plannedProjectIdSet.has(project.designId)
 	                  const selectedPrinterCompatibility = getPrinterCompatibility(profile, targetPrinter, isEnglish)
                     const selectedProfileBadges = getProfileBadges(project, profile, isEnglish)
                     const selectionReason = getProfileSelectionReason(
                       project,
-                      profile,
+                      selectedProfiles,
                       Boolean(manualProfileSelections[project.designId]),
                       isEnglish,
                     )
@@ -2375,8 +2480,8 @@ function App() {
                         <div className="project-title-line">
                           <h3>{project.title}</h3>
                           <div className="project-weight">
-                            <strong>{profile.weight}g</strong>
-                            <span>{formatMinutes(profile.predictionSeconds)}</span>
+                            <strong>{getProfilesWeight(selectedProfiles)}g</strong>
+                            <span>{formatMinutes(getProfilesPredictionSeconds(selectedProfiles))}</span>
                           </div>
                         </div>
                         <div className={cx('profile-picker', openProfilePickerId === project.designId && 'open')}>
@@ -2393,16 +2498,21 @@ function App() {
                           >
                             {renderProfileBadgeSymbols(selectedProfileBadges)}
                             <span className="profile-picker-current">
-                              <strong>{profile.title}</strong>
-                              <small>{profileDetailsLabel(profile, isEnglish)}</small>
+                              <strong>{getSelectedProfilesLabel(selectedProfiles, isEnglish)}</strong>
+                              <small>{getSelectedProfilesDetailsLabel(selectedProfiles, isEnglish)}</small>
                             </span>
                             <i className="profile-picker-caret" aria-hidden="true" />
                           </button>
                           {openProfilePickerId === project.designId && (
-                            <div className="profile-picker-menu" role="listbox" aria-label={`${project.title} profile`}>
+                            <div
+                              className="profile-picker-menu"
+                              role="listbox"
+                              aria-label={`${project.title} profile`}
+                              aria-multiselectable="true"
+                            >
                               {sortedInstances.map((instance) => {
                                 const instanceBadges = getProfileBadges(project, instance, isEnglish)
-                                const isSelectedProfile = instance.instanceId === profile.instanceId
+                                const isSelectedProfile = selectedProfileIds.has(instance.instanceId)
                                 return (
                                   <button
                                     className={cx('profile-picker-option', isSelectedProfile && 'selected')}
@@ -2410,9 +2520,14 @@ function App() {
                                     type="button"
                                     role="option"
                                     aria-selected={isSelectedProfile}
-                                    onClick={() => updateSelectedProfile(project.designId, instance.instanceId)}
+                                    onClick={() => toggleSelectedProfile(project.designId, instance.instanceId)}
                                   >
-                                    {renderProfileBadgeSymbols(instanceBadges)}
+                                    <span className="profile-picker-check" aria-hidden="true">
+                                      {isSelectedProfile && <CheckCircle2 size={15} />}
+                                    </span>
+                                    <span className="profile-picker-option-badges">
+                                      {renderProfileBadgeSymbols(instanceBadges)}
+                                    </span>
                                     <span className="profile-picker-option-copy">
                                       <strong>{instance.title}</strong>
                                       <small>{profileDetailsLabel(instance, isEnglish)}</small>
@@ -2426,18 +2541,20 @@ function App() {
                         <p className="profile-selection-reason">{selectionReason}</p>
                         <div className="profile-summary">
                           <div className="profile-meta">
-                            {selectedProfileBadges.map((badge) => (
-                              <span
-                                className={cx('profile-badge', `profile-badge-${badge.tone}`)}
-                                key={badge.key}
-                                title={badge.title}
-                                aria-label={badge.label}
-                              >
-                                {badge.symbol}
-                              </span>
-                            ))}
-                            <span>{profile.printer || text.anyPrinter}</span>
-                            {targetPrinter !== anyPrinter && (
+                            {selectedProfiles.length === 1 &&
+                              selectedProfileBadges.map((badge) => (
+                                <span
+                                  className={cx('profile-badge', `profile-badge-${badge.tone}`)}
+                                  key={badge.key}
+                                  title={badge.title}
+                                  aria-label={badge.label}
+                                >
+                                  {badge.symbol}
+                                </span>
+                              ))}
+                            {selectedProfiles.length > 1 && <span>{getSelectedProfilesLabel(selectedProfiles, isEnglish)}</span>}
+                            <span>{getSelectedProfilesDetailsLabel(selectedProfiles, isEnglish)}</span>
+                            {targetPrinter !== anyPrinter && selectedProfiles.length === 1 && (
                               <span
                                 className={cx(
                                   selectedPrinterCompatibility.rank > 0 ? 'printer-match' : 'printer-mismatch',
@@ -2448,12 +2565,16 @@ function App() {
                                 {selectedPrinterCompatibility.label}
                               </span>
                             )}
-                            <span>{profile.layerHeight || '-'}mm</span>
-                            <span>{profile.infill || '-'} {text.fill}</span>
-                            <span>{profile.needAms ? text.needsAms : text.noAms}</span>
+                            {selectedProfiles.length === 1 && (
+                              <>
+                                <span>{profile.layerHeight || '-'}mm</span>
+                                <span>{profile.infill || '-'} {text.fill}</span>
+                              </>
+                            )}
+                            <span>{selectedProfiles.some((selectedProfile) => selectedProfile.needAms) ? text.needsAms : text.noAms}</span>
                           </div>
                           <div className="filament-strip" aria-label={`${project.title} ${text.colorsAria}`}>
-                            {profile.filaments.map((filament) => (
+                            {selectedFilamentRows.map((filament) => (
                               <button
                                 key={filamentKey(filament)}
                                 className={focusedColorKey === filamentKey(filament) ? 'focused' : ''}
@@ -2475,7 +2596,7 @@ function App() {
 	                              <button
                                   key={instance.instanceId}
                                   className={cx(
-                                    instance.instanceId === profile.instanceId && 'selected',
+                                    selectedProfileIds.has(instance.instanceId) && 'selected',
                                     targetPrinter !== anyPrinter &&
                                       (printerCompatibility.rank > 0 ? 'printer-compatible' : 'printer-unmatched'),
                                     targetPrinter !== anyPrinter &&
@@ -2483,7 +2604,8 @@ function App() {
                                       'printer-exact',
                                   )}
                                   type="button"
-                                  onClick={() => updateSelectedProfile(project.designId, instance.instanceId)}
+                                  aria-pressed={selectedProfileIds.has(instance.instanceId)}
+                                  onClick={() => toggleSelectedProfile(project.designId, instance.instanceId)}
                                 >
                                   {profileBadges.length > 0 && (
                                     <span className="profile-card-badges">
@@ -2517,23 +2639,23 @@ function App() {
                         <div className="profile-signals" aria-label={`${project.title} ${text.profileMetricsAria}`}>
                           <span>
                             {text.estimatedTime}
-                            <strong>{formatMinutes(profile.predictionSeconds)}</strong>
+                            <strong>{formatMinutes(getProfilesPredictionSeconds(selectedProfiles))}</strong>
                           </span>
                           <span>
                             {text.plateCount}
-                            <strong>{profile.plateCount}</strong>
+                            <strong>{getProfilesPlateCount(selectedProfiles)}</strong>
                           </span>
                           <span>
                             {text.rating}
-                            <strong>{formatRating(profile, isEnglish)}</strong>
+                            <strong>{selectedProfiles.length === 1 ? formatRating(profile, isEnglish) : '-'}</strong>
                           </span>
                           <span>
                             {text.downloads}
-                            <strong>{formatCount(profile.downloadCount)}</strong>
+                            <strong>{selectedProfiles.length === 1 ? formatCount(profile.downloadCount) : '-'}</strong>
                           </span>
                           <span>
                             {text.prints}
-                            <strong>{formatCount(profile.printCount)}</strong>
+                            <strong>{selectedProfiles.length === 1 ? formatCount(profile.printCount) : '-'}</strong>
                           </span>
                         </div>
                       </div>
@@ -2625,7 +2747,7 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
-	                      {matrixRows.map(({ project, profile, byColor }) => (
+	                      {matrixRows.map(({ project, profiles, byColor }) => (
 	                        <tr key={project.designId}>
 	                          <th className="matrix-project-col">
 	                            <label className="matrix-project-plan">
@@ -2637,7 +2759,7 @@ function App() {
 	                              />
 	                              <span>
 	                                <strong>{project.title}</strong>
-	                                <small>{profile.title}</small>
+	                                <small>{getSelectedProfilesLabel(profiles, isEnglish)}</small>
 	                              </span>
 	                            </label>
 	                          </th>
@@ -2948,7 +3070,7 @@ function App() {
                 </div>
 	            <div className="purchase-project-strip" aria-label={text.purchaseProjectFilterAria}>
 	              {projects.map((project) => {
-	                const profile = getSelectedProfile(project)
+	                const selectedProfiles = getSelectedProfiles(project)
 	                const isIncluded = plannedProjectIdSet.has(project.designId)
 	                return (
 	                  <label
@@ -2965,7 +3087,7 @@ function App() {
                         <em>{getProjectNumber(project.designId) || ''}</em>
 	                      <strong>{project.title}</strong>
 	                      <small>
-	                        {profile.weight}g · {profile.printer || text.anyPrinter}
+	                        {getProfilesWeight(selectedProfiles)}g · {getSelectedProfilesLabel(selectedProfiles, isEnglish)}
 	                      </small>
 	                    </span>
 	                  </label>

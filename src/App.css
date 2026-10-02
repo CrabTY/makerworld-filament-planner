@@ -932,11 +932,24 @@ select {
   cursor: pointer;
   display: grid;
   gap: 8px;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: 18px auto minmax(0, 1fr);
   min-height: 42px;
   padding: 6px 7px;
   text-align: left;
   width: 100%;
+}
+
+.profile-picker-check {
+  align-items: center;
+  color: #df3f2f;
+  display: inline-flex;
+  height: 18px;
+  justify-content: center;
+  width: 18px;
+}
+
+.profile-picker-option-badges {
+  min-width: 0;
 }
 
 .profile-picker-option:hover {
