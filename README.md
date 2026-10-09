@@ -109,6 +109,7 @@ Short version:
 ## Open Source and Contributing
 
 - License: [AGPL-3.0-or-later](./LICENSE)
+- Copyright (c) 2026 Tao Yang.
 - Contributing guide: [CONTRIBUTING.md](./CONTRIBUTING.md)
 - Security reporting: [SECURITY.md](./SECURITY.md)
 - Trademark notice: [TRADEMARKS.md](./TRADEMARKS.md)
